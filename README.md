@@ -22,13 +22,39 @@ export CONTRACT_ID="ct_J3zwj9vQnyEdYNijeUxeeSJdHpUNRojRsSdjPdbxugRy86R1R" # to b
 export CONTRACT_DEPLOY_AMOUNT="2AE"
 ```
 
-## Usage
+## COMMANDS DEMO LIST
 
->  It is recommended to use a local node with fast mining since claiming a name take some time (~9m on mainnet / testnet)
+you need a fresh node and a compiler available locally
 
-Create a [new account](https://aepp-sdk-python.readthedocs.io/en/latest/intro/tutorial05-cli.html#example-usage)
+```
+source .envrc
+aecli account spend ~/.config/aeternity/genesis.json $MERCHANT_ADDRESS 500ae
+aecli account spend ~/.config/aeternity/genesis.json $ALICE_ADDRESS 500ae
+aecli account spend ~/.config/aeternity/genesis.json $BOB_ADDRESS 500ae
+aecli inspect $MERCHANT_ADDRESS
+export ACCOUNT_KEYSTORE_PATH=MERCHANT
+./sell_names.py deploy
+aecli inspect $ALICE_ADDRESS
+aecli inspect $BOB_ADDRESS
+aecli inspect $CONTRACT_ADDRESS
+export ACCOUNT_KEYSTORE_PATH=ALICE
+./sell_names.py claim $AE_NAME
+aecli inspect $AE_NAME
+./sell_names.py sell $AE_NAME 100ae
+export ACCOUNT_KEYSTORE_PATH=BOB
+./sell_names.py sales
+./sell_names.py buy $AE_NAME 100ae
+aecli inspect $AE_NAME
+./sell_names.py sales
+aecli inspect $ALICE_ADDRESS
+aecli inspect $BOB_ADDRESS
+aecli inspect $CONTRACT_ADDRESS
+```
 
-./sell_names.py claim 
+
+
+
+
 
 
 
