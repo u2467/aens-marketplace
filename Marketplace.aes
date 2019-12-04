@@ -1,0 +1,140 @@
+@compiler >= 4
+/*
+* This contract act as a atomic swap for aens
+*/
+contract Marketplace =
+  
+  record sale = { price: int, owner: address, recipient: address, locked_until: int, commission: int }
+  
+  record state = { sales : map(string, sale), merchant : address, props : map(string, int) } 
+
+  stateful entrypoint init() : state = { sales = {}, props = {}, merchant = Contract.creator }
+
+  /*
+  * offer: offer a domain for sale 
+  * name - the name to sell
+  * price - the price in aettos requested for the name 
+  * recipient - if it is the same account of the owner then everybody can buy, otherwise only the recipient can
+  * transfer_sig - the signature to allow the contract to transfer the name to its account
+  *
+  * from the price a commission will be taken to be able to pay for the required transactions
+  * the call will fail if:
+  * - the price is not enough to cover the commission
+  * - the marketplace is closed
+  * - the inner name transfer fails
+  */
+  stateful entrypoint offer(name: string, price: int, recipient: address, transfer_sig: signature) = 
+    _check_open_marketplace()
+    let commission = _calculate_commission(price)
+    require(price >= commission, "err:exec:too_low_price")
+    // abort(String.concat("sig:", Bytes.to_str(sig)))
+    let lock_height = Chain.block_height + Map.lookup_default("sale_lock_period", state.props, 0)
+    // build the sale record
+    let sale = { price = price, recipient = recipient, owner = Call.caller, locked_until = lock_height, commission = commission}
+    // transfer the name
+    AENS.transfer(Call.caller, Contract.address, name, signature = transfer_sig)
+    // add the name sale to the available sales
+    put(state{sales[name] = sale})
+  
+  // calculate the commission given a price 
+  // TODO: give a better estimate fo the min_commission
+  function _calculate_commission(price: int) =
+    require(price > 0, "err:val:negative_price")
+    let perc = price * (Map.lookup_default("sale_commission", state.props, 1) / 100)
+    let min = Map.lookup_default("min_commission", state.props, 100000000000000000)
+    if (perc > min)
+        perc
+    else 
+        min
+
+  // remove a name from sale (returns it to the owner)
+  // it can be done by 
+  // - the seller after the lock period by paying the commission
+  // - the merchant at any time
+  payable stateful entrypoint delist(name: string) =
+    let sale = get_sale(name)
+    if(Call.caller != sale.owner && Call.caller != state.merchant)
+      abort(String.concat("err:auth:", Address.to_str(Call.caller)))
+    if(Call.caller == sale.owner)
+      // if delisted from owner take the commission and verify the name lock
+      require(Chain.block_height >= sale.locked_until, "err:auth:sale_locked")
+      require(Call.value >= _calculate_commission(sale.price), "err:exec:commission_fee_not_met")
+    // transfer back the name
+    AENS.transfer(Contract.address, sale.owner, name)
+    Map.delete(name, state.sales)
+  
+  // buy a name 
+  payable stateful entrypoint buy(name: string) = 
+    _check_open_marketplace()
+    let sale = get_sale(name)
+    _check_direct_sale(sale)
+    // check the price
+    require(Call.value >= sale.price, "err:exec:price_not_met")
+    // remove the commission
+    let owner_amount = sale.price - _calculate_commission(sale.price)
+    // transfer the tokens and the name
+    Chain.spend(sale.owner, owner_amount)
+    AENS.transfer(Contract.address, Call.caller, name)
+    // remove the sale
+    Map.delete(name, state.sales)
+    
+  // get the price for a name 
+  entrypoint get_price(name: string) = 
+    switch(Map.lookup(name, state.sales)) 
+      // if it's there return the value
+      Some(sale)  => sale.price 
+      None        => abort("err:exec:not_for_sale")
+  
+  // get the name sale 
+  entrypoint get_sale(name: string) = 
+    switch(Map.lookup(name, state.sales)) 
+      // if it's there return the value
+      Some(sale)  => sale 
+      None        => abort("err:exec:not_for_sale")
+  
+  // get the number of names on sale
+  entrypoint count_sales() = 
+    Map.size(state.sales)
+
+    // export the data
+  entrypoint export_sales() = 
+    state.sales
+
+  /* PROPERTIES */
+  // set a property value
+  stateful entrypoint set_property(name: string, value: int) = 
+    _check_is_merchant()
+    put(state{props[name] = value})
+  
+
+  // get a property value
+  entrypoint get_property(name: string) = 
+    Map.lookup_default(name, state.props, 0)
+
+  /* MERCHANT */
+  // get the current owner
+  entrypoint get_merchant() =
+    state.merchant
+
+  // set the merchant address
+  stateful entrypoint set_merchant(merchant: address) = 
+    _check_is_merchant()
+    put(state{merchant = merchant})
+
+  // withdraw
+  stateful entrypoint withdraw(amount: int) = 
+    _check_is_merchant()
+    Chain.spend(state.merchant, amount)
+  
+  
+  /* Local checks */
+  function _check_direct_sale(name_sale: sale) =
+    if(name_sale.recipient != name_sale.owner)
+      require(name_sale.recipient == Call.caller, "err:exec:direct_sale_address_mismatch")
+  
+  function _check_open_marketplace() =
+    let is_open = Map.lookup_default("sale_commission", state.props, 1)
+    require(is_open > 0, "err:state:marketplace_closed")
+
+  function _check_is_merchant() =
+    require(Call.caller == state.merchant, String.concat("err:auth:", Address.to_str(Call.caller)))    
