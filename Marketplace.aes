@@ -61,7 +61,8 @@ contract Marketplace =
       require(Call.value >= _calculate_commission(sale.price), "err:exec:commission_fee_not_met")
     // transfer back the name
     AENS.transfer(Contract.address, sale.owner, name)
-    Map.delete(name, state.sales)
+    put(state{sales = Map.delete(name, state.sales)})
+    
   
   // buy a name 
   payable stateful entrypoint buy(name: string) = 
@@ -76,7 +77,7 @@ contract Marketplace =
     Chain.spend(sale.owner, owner_amount)
     AENS.transfer(Contract.address, Call.caller, name)
     // remove the sale
-    Map.delete(name, state.sales)
+    put(state{sales = Map.delete(name, state.sales)})
     
   // get the price for a name 
   entrypoint get_price(name: string) = 

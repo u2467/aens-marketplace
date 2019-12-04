@@ -12,12 +12,12 @@ from aeternity import hashing, identifiers, utils
 
 ACCOUNT_KEYSTORE =  os.environ.get("ACCOUNT_KEYSTORE_PATH", "/home/andrea/.config/aeternity/andrea")
 CONTRACT_ID = os.environ.get("CONTRACT_ID", "ct_SjidAc7fm3csjUUdWZXZ2EfBs7XNHDHVnKvMAjvBZuvWVngjU")
-CONTRACT_DEPLOY_AMOUNT = os.environ.get("CONTRACT_DEPLOY_AMOUNT", "20AE")
+CONTRACT_DEPLOY_AMOUNT = os.environ.get("CONTRACT_DEPLOY_AMOUNT", "2AE")
 CONTRACT_SRC_URI = os.environ.get("CONTRACT_SRC_LOCATION", "Marketplace.aes")
 NODE_URL = os.environ.get('NODE_URL', 'https://testnet.aeternity.io')
 NODE_INTERNAL_URL = os.environ.get('NODE_INTERNAL_URL', 'https://testnet.aeternity.io')
 COMPILER_URL = os.environ.get('COMPILER_URL', 'https://compiler.aepps.com')
-NAME_RECIPIENT = os.environ.get("NAME_RECIPIENT", "ak_11111111111111111111111111111111273Yts")
+
 
 def _get_src():
     if CONTRACT_SRC_URI.startswith("http"):
@@ -25,7 +25,6 @@ def _get_src():
     else:
         with open(CONTRACT_SRC_URI) as fp:
             return fp.read()
-
 
 
 def _get_cli(debug=False):
@@ -38,9 +37,29 @@ def _get_cli(debug=False):
     compiler = CompilerClient(compiler_url=COMPILER_URL)
     return node_cli, compiler
 
+
 def _get_account():
     password = input(f"Enter the password for account {ACCOUNT_KEYSTORE}:\n")
     return Account.from_keystore(ACCOUNT_KEYSTORE, password)
+
+
+def _get_contract():
+    try:
+        owner = _get_account()
+        # contract
+        contract_id = CONTRACT_ID
+        # read contract file
+        contract_src = _get_src()
+        node_cli, compiler = _get_cli(args.debug)
+        # name to sell
+        return ContractNative(client=node_cli,
+                              compiler=compiler,
+                              account=owner,
+                              source=contract_src,
+                              address=contract_id,
+                              use_dry_run=True)
+    except Exception as e:
+        print(e)
 
 def cmd_claim(args):
     owner = _get_account()
@@ -87,7 +106,7 @@ def cmd_sell(args):
         # name to sell
         name = args.name
         price = utils.amount_to_aettos(args.price)
-        recipient = NAME_RECIPIENT
+        recipient = args.to if args.to is not None else owner.get_address()
 
         contract = ContractNative(client=node_cli,
                                   compiler=compiler,
@@ -98,7 +117,10 @@ def cmd_sell(args):
                                   )
 
         print(f" ** Contract ID: {contract_id}")
-        print(f" ** Sell name {name} from {owner} to {recipient} at {args.price} ({price} aettos)")
+        if owner.get_address() == recipient:
+            print(f" ** Sell name {name} from {owner.get_address()} to anybody at {args.price} ({price} aettos)")
+        else:
+            print(f" ** Sell name {name} from {owner.get_address()} to {recipient} at {args.price} ({price} aettos)")
         # create a signature
         signature = contract_aens_transfer_sig(owner, name, contract_id, node_cli.config.network_id)
         print(f"Signature: {hashing.encode(identifiers.SIGNATURE, signature)}")
@@ -128,7 +150,6 @@ def contract_aens_transfer_sig(owner, name, contract_id, nid):
     return sig
 
 
-
 def cmd_check_name(args):
     # contract
     contract_id = CONTRACT_ID
@@ -137,11 +158,8 @@ def cmd_check_name(args):
     node_cli, compiler = _get_cli(args.debug)
     # name to sell
     name = args.name
-
-    # first check the name 
-    aens = node_cli.AEName(name)
-    print(aens.status)
-    # 
+    # first check the name
+    # aens = node_cli.AEName(name)
     contract = ContractNative(client=node_cli,
                               compiler=compiler,
                               source=contract_src,
@@ -150,14 +168,63 @@ def cmd_check_name(args):
                               use_dry_run=True
                               )
     info, result = contract.get_sale(name)
-    print(info)
-    print(result)
+    print(f"result {info.return_type}, gas used {info.gas_used}")
+    print_sale(name, result)
+
+def cmd_sales(args):
+    # contract
+    contract_id = CONTRACT_ID
+    # read contract file
+    contract_src = _get_src()
+    node_cli, compiler = _get_cli(args.debug)
+    # first check the name
+    contract = ContractNative(client=node_cli,
+                              compiler=compiler,
+                              source=contract_src,
+                              address=contract_id,
+                              account=_get_account(),
+                              use_dry_run=True
+                              )
+    info, result = contract.export_sales()
+    print(f"result {info.return_type}, gas used {info.gas_used}")
+    for k,v in result.items():
+        print_sale(k, v)
+
+def print_sale(name, sale):
+    print(f"Name sale for {name}:")
+    print(f"Owner: {sale['owner']}")
+    print(f"> price {utils.format_amount(sale['price'])}")
+    print(f"> lock h {sale['locked_until']}")
+    if sale['owner'] == sale['recipient']:
+        print(f"> public sale")
+    else:
+        print(f"> private sale for {sale['recipient']}")
+
 
 def cmd_buy(args):
     try:
-        pass
+        owner = _get_account()
+        # contract
+        contract_id = CONTRACT_ID
+        # read contract file
+        contract_src = _get_src()
+        node_cli, compiler = _get_cli(args.debug)
+        # name to sell
+        contract = ContractNative(client=node_cli,
+                                  compiler=compiler,
+                                  account=owner,
+                                  source=contract_src,
+                                  address=contract_id,
+                                  use_dry_run=True)
+        # name to sell
+        name = args.name
+        price = utils.amount_to_aettos(args.price)
+        info, result = contract.buy(name, amount=price)
+        print(info)
+        node_cli.AEName(name).update(owner, ("new_owner", owner.get_address()))
+
     except Exception as e:
-        print(f"Invalid keystore or password: {e}")
+        print(e)
 
 
 if __name__ == "__main__":
@@ -174,6 +241,11 @@ if __name__ == "__main__":
                 {
                     "names": ["price"],
                     "help": "the price to sell for"
+                },
+                {
+                    "names": ["--to"],
+                    "help": "the recipient to to sell the name to",
+                    "default": None,
                 },
                 {
                     "names": ["--debug"],
@@ -227,6 +299,19 @@ if __name__ == "__main__":
                     "names": ["name"],
                     "help": "The name to buy",
                 },
+                {
+                    "names": ["--debug"],
+                    "help": "",
+                    "action": "store_true",
+                    "default": False
+                },
+            ]
+        },
+        {
+            'name': 'sales',
+            'help': "check the price for a name",
+            'target': cmd_sales,
+            'opts': [
                 {
                     "names": ["--debug"],
                     "help": "",
