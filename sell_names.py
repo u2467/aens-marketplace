@@ -186,7 +186,7 @@ def cmd_sales(args):
                               use_dry_run=True
                               )
     info, result = contract.export_sales()
-    print(f"result {info.return_type}, gas used {info.gas_used}")
+    print(f"result {info.return_type}")
     for k,v in result.items():
         print_sale(k, v)
 

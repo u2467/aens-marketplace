@@ -18,8 +18,8 @@ export CONTRACT_SRC_LOCATION="Marketplace.aes" # can also be an url
 export NODE_URL="http://localhost:3013" 
 export NODE_INTERNAL_URL="http://localhost:3113" # for dry-run calls 
 export COMPILER_URL="https://localhost:3080" 
-export CONTRACT_ID="ct_ykP2aa7x2A3VioMBVfhsh96h4fkhEAAHL2Czyfs1ZPqKyisSy" # to be changed with the results od deploy
-export CONTRACT_DEPLOY_AMOUNT="20AE"
+export CONTRACT_ID="ct_J3zwj9vQnyEdYNijeUxeeSJdHpUNRojRsSdjPdbxugRy86R1R" # to be changed with the results od deploy
+export CONTRACT_DEPLOY_AMOUNT="2AE"
 ```
 
 ## Usage
