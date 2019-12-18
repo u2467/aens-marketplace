@@ -1,0 +1,26 @@
+version: "3"
+services:
+  aeternity-node:
+    container_name: aeternity-node
+    # image: aeternity/aeternity:aeuniverse-demo
+    image: aeternity/aeternity:v5.2.0
+    ports:
+      - 3013:3013
+      - 3113:3113
+    environment:
+      AETERNITY_CONFIG: /home/aeternity/aeternity.yaml
+    volumes:
+      - ${PWD}/node/config.yaml:/home/aeternity/aeternity.yaml
+      #- ${PWD}/docker/keys/node:/home/aeternity/node/keys
+      - ${PWD}/node/log:/home/aeternity/node/log
+      - ${PWD}/node/accounts_test.json:/home/aeternity/node/data/aecore/.genesis/accounts_test.json
+      - node_db:/home/aeternity/node/data/mnesia
+      #- node_keys:/home/aeternity/node/keys
+  compiler:
+    container_name: aeternity-compiler
+    image: aeternity/aesophia_http:v4.1.0
+    ports:
+      - 3080:3080
+
+volumes:
+  node_db:
